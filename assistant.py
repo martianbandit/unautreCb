@@ -1,15 +1,16 @@
 import openai
 import gradio as gr
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
 # Votre clé API OpenAI (remplacez-la par la vôtre)
-openai.api_key = "votre-cle-api-openai"
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # ID des assistants (Remplacez par vos vrais IDs)
 assistant_ids = {
-    "Assistant SAAQ": "assistant_saaq_id",
-    "OBD2 Diagnostic": "obd2_diagnostic_id",
-    "Expert Mécanique": "expert_mecanique_id",
-    "Analyse d'Accident": "analyse_accident_id"
+    "GPTBay": "asst_jkf2zv9jlzYj4prJ7dHECOWL",
+    "specialiste_du_vrac": "asst_HSUZYtNegNGOfXRC3p7NqInX"
 }
 
 # Fonction pour interroger l'API OpenAI en utilisant l'ID de l'assistant
