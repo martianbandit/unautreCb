@@ -14,20 +14,6 @@ assistant_ids = {
     "specialiste_du_vrac": "asst_HSUZYtNegNGOfXRC3p7NqInX"
 }
 
-def resize_image(image):
-    try:
-        img = Image.open(image)
-        # Assurez-vous que l'image est en mode 'RGB' pour éviter les erreurs liées à la transparence dans les PNG
-        if img.mode != "RGB":
-            img = img.convert("RGB")
-        new_size = (img.width // 3, img.height // 3)
-        resized_img = img.resize(new_size)
-        return resized_img
-    except Exception as e:
-        print(f"Erreur lors du redimensionnement de l'image : {str(e)}")
-        return None
-
-
 # Fonction pour interroger l'API OpenAI en utilisant l'ID de l'assistant
 def chat_with_assistant(input_text, assistant, temp, contrast, image):
 
@@ -67,7 +53,6 @@ with gr.Blocks() as interface:
     # Titre, sous-titre et image
     with gr.Row():
         gr.Markdown("# 🧰 Mes assistants Mécaniciens 🔧\n### Des assistants spécialisés dans plusieurs facettes du domaine de la Mécanique.")
-        gr.Image("/workspaces/unautreCb/cti43y3h.png", elem_id="header_img", interactive=False)
     
     # Layout de la barre latérale et du chat
     with gr.Row():
