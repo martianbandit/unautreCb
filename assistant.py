@@ -22,10 +22,10 @@ def chat_with_assistant(input_text, assistant, temp, contrast, image):
     # Appel à l'API OpenAI
     try:
         response = openai.Completion.create(
-            engine="text-davinci-003",  # Ou GPT-4 si vous avez accès
+            engine="GPT-4o-mini",  # Ou GPT-4 si vous avez accès
             prompt=prompt,
             temperature=temp,
-            max_tokens=150,
+            max_tokens=1500,
             n=1,
             stop=["Utilisateur:", "Assistant:"]
         )
@@ -50,7 +50,7 @@ with gr.Blocks() as interface:
     # Titre, sous-titre et image
     with gr.Row():
         gr.Markdown("# 🧰 Mes assistants Mécaniciens 🔧\n### Des assistants spécialisés dans plusieurs facettes du domaine de la Mécanique.")
-        gr.Image("/mnt/data/E03781FD-33AB-4283-8E58-FD39C5F6B23B.png", elem_id="header_img", interactive=False)
+        gr.Image("/workspaces/unautreCb/cti43y3h.png", elem_id="header_img", interactive=False)
     
     # Layout de la barre latérale et du chat
     with gr.Row():
@@ -69,6 +69,7 @@ with gr.Blocks() as interface:
             
             # Annonce sous le chat
             gr.Markdown("Visitez [GPTsIndex](http://www.gpts-index.com) pour d’autres applications IA!!")
+            gr.image("/workspaces/unautreCb/cti43y3h.png")
     
     # Action du bouton envoyer
     send_button.click(chat_with_assistant, inputs=[user_input, assistant_choice, temperature, contrast_mode, file_upload], outputs=chat_window)

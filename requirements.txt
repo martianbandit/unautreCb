@@ -1,4 +1,2 @@
 openai
 gradio
-os
-panda
