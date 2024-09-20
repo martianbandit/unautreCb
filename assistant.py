@@ -1,3 +1,4 @@
+from PIL import Image
 import openai
 import gradio as gr
 from dotenv import load_dotenv
@@ -13,8 +14,23 @@ assistant_ids = {
     "specialiste_du_vrac": "asst_HSUZYtNegNGOfXRC3p7NqInX"
 }
 
+def resize_image(image):
+    try:
+        img = Image.open(image)
+        # Assurez-vous que l'image est en mode 'RGB' pour éviter les erreurs liées à la transparence dans les PNG
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        new_size = (img.width // 3, img.height // 3)
+        resized_img = img.resize(new_size)
+        return resized_img
+    except Exception as e:
+        print(f"Erreur lors du redimensionnement de l'image : {str(e)}")
+        return None
+
+
 # Fonction pour interroger l'API OpenAI en utilisant l'ID de l'assistant
 def chat_with_assistant(input_text, assistant, temp, contrast, image):
+
     assistant_id = assistant_ids[assistant]  # Récupérer l'ID de l'assistant sélectionné
     
     # Créer le prompt en fonction de l'assistant sélectionné
@@ -44,7 +60,7 @@ def chat_with_assistant(input_text, assistant, temp, contrast, image):
         return f"Erreur avec l'API OpenAI: {str(e)}"
 
 # Liste des assistants disponibles
-assistants = ["Assistant SAAQ", "OBD2 Diagnostic", "Expert Mécanique", "Analyse d'Accident"]
+assistants = ["GPTBay", "specialiste_du_vrac"]
 
 # Interface utilisateur avec Gradio
 with gr.Blocks() as interface:
@@ -69,9 +85,7 @@ with gr.Blocks() as interface:
             send_button = gr.Button("Envoyer")
             
             # Annonce sous le chat
-            gr.Markdown("Visitez [GPTsIndex](http://www.gpts-index.com) pour d’autres applications IA!!")
-            gr.image("/workspaces/unautreCb/cti43y3h.png")
-    
+            gr.Markdown("Visitez [🤖GPTsIndex🤖](http://www.gpts-index.com) pour d’autres applications IA!!")
     # Action du bouton envoyer
     send_button.click(chat_with_assistant, inputs=[user_input, assistant_choice, temperature, contrast_mode, file_upload], outputs=chat_window)
 
