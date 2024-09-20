@@ -53,6 +53,7 @@ with gr.Blocks() as interface:
     # Titre, sous-titre et image
     with gr.Row():
         gr.Markdown("# 🧰 Mes assistants Mécaniciens 🔧\n### Des assistants spécialisés dans plusieurs facettes du domaine de la Mécanique.")
+
     
     # Layout de la barre latérale et du chat
     with gr.Row():
