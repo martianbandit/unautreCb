@@ -178,7 +178,7 @@ def main():
             outputs=output
         )
 
-    demo.queue(api_open=False, max_size=3).launch()
+    demo.launch()
 
 if __name__ == "__main__":
     main()
