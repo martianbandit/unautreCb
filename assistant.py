@@ -62,10 +62,11 @@ with gr.Blocks() as interface:
     # Layout de la barre latérale et du chat
     with gr.Row():
         with gr.Column():
+            contrast_mode = gr.Radio(label="Mode Contraste de l'application:", choices=["Clair", "Sombre"], value="Clair")
             assistant_choice = gr.Radio(label="Sélectionnez un Assistant:", choices=assistants, value=assistants[0])
-            file_upload = gr.File(label="Télécharger une image ou fichier:")
+            file_upload = gr.File(label="Télécharger une image ou fichier:", height=150)
             temperature = gr.Slider(label="Température du modèle", minimum=0, maximum=1, value=0.7, step=0.1)
-            contrast_mode = gr.Radio(label="Mode Contraste de l'image:", choices=["Clair", "Sombre"], value="Clair")
+            
         
         with gr.Column():
             chat_window = gr.Chatbot(label="Chat", height=400)
@@ -75,7 +76,7 @@ with gr.Blocks() as interface:
             send_button = gr.Button("Envoyer")
             
             # Annonce sous le chat
-            gr.Markdown("Visitez [🤖GPTsIndex🤖](http://www.gpts-index.com) pour d’autres applications IA!!")
+            gr.Markdown("###Visitez [🤖GPTsIndex🤖](http://www.gpts-index.com) pour d’autres applications IA!!")
     # Action du bouton envoyer
     send_button.click(chat_with_assistant, inputs=[user_input, assistant_choice, temperature, contrast_mode, file_upload], outputs=chat_window)
 
