@@ -19,7 +19,10 @@ assistant_ids = {
 }
 
 # Fonction pour interroger l'API OpenAI en utilisant l'ID de l'assistant
-def chat_with_assistant(input_text, assistant, temp, contrast, image):
+def chat_with_assistant(input_text, assistant, temp, file_upload):
+
+    if assistant not in assistant_ids:
+        return [("Erreur", f"L'assistant '{assistant}' n'est pas valide.")]
 
     assistant_id = assistant_ids[assistant]  # Récupérer l'ID de l'assistant sélectionné
     
@@ -29,7 +32,7 @@ def chat_with_assistant(input_text, assistant, temp, contrast, image):
     # Appel à l'API OpenAI
     try:
         response = openai.Completion.create(
-            engine="GPT-4o-mini",  # Ou GPT-4 si vous avez accès
+            engine="text-davinci-003",  # Ou GPT-4 si vous avez accès
             prompt=prompt,
             temperature=temp,
             max_tokens=1500,
@@ -41,16 +44,16 @@ def chat_with_assistant(input_text, assistant, temp, contrast, image):
         # Réponse personnalisée avec icône
         response_text = f"{'🤖' if assistant == 'OBD2 Diagnostic' else '👨‍💻'} {response_text}"
         
-        if image:
-            response_text += f"\nVous avez téléchargé une image : {image.name}."
+        if file_upload:
+            response_text += f"\nVous avez téléchargé une image : {file_upload.name}."
             
-        return response_text
+        return [(input_text, response_text)]
     
     except Exception as e:
-        return f"Erreur avec l'API OpenAI: {str(e)}"
+        return [("Erreur", f"Erreur avec l'API OpenAI: {str(e)}")]
 
 # Liste des assistants disponibles
-assistants = ["GPTBay", "specialiste_du_vrac","Scraping and Crawling Expert Code (RAG)","Hybrid Designer","SaaS starter","Math tuthor"]
+assistants = ["GPTBay", "specialiste_du_vrac", "Scraping and Crawling Expert Code (RAG)", "Hybrid Designer", "SaaS starter", "Math tuthor"]
 
 # Interface utilisateur avec Gradio
 with gr.Blocks() as interface:
@@ -58,7 +61,6 @@ with gr.Blocks() as interface:
     with gr.Row():
         gr.Markdown("# 🧰 Mes assistants Mécaniciens 🔧\n### Des assistants spécialisés dans plusieurs facettes du domaine de la Mécanique.")
 
-    
     # Layout de la barre latérale et du chat
     with gr.Row():
         with gr.Column():
@@ -66,19 +68,23 @@ with gr.Blocks() as interface:
             assistant_choice = gr.Radio(label="Sélectionnez un Assistant:", choices=assistants, value=assistants[0])
             file_upload = gr.File(label="Télécharger une image ou fichier:", height=150)
             temperature = gr.Slider(label="Température du modèle", minimum=0, maximum=1, value=0.7, step=0.1)
-            
-        
+
         with gr.Column():
             chat_window = gr.Chatbot(label="Chat", height=400)
             user_input = gr.Textbox(label="Votre message ici", placeholder="Tapez votre question...")
 
             # Bouton d'envoi
             send_button = gr.Button("Envoyer")
-            
+
             # Annonce sous le chat
-            gr.Markdown("###Visitez [🤖GPTsIndex🤖](http://www.gpts-index.com) pour d’autres applications IA!!")
+            gr.Markdown("### Visitez [🤖GPTsIndex🤖](http://www.gpts-index.com) pour d’autres applications IA!!")
+
     # Action du bouton envoyer
-    send_button.click(chat_with_assistant, inputs=[user_input, assistant_choice, temperature, contrast_mode, file_upload], outputs=chat_window)
+    send_button.click(
+        chat_with_assistant,
+        inputs=[user_input, assistant_choice, temperature, file_upload],
+        outputs=chat_window
+    )
 
 # Lancer l'interface Gradio
 interface.launch()
