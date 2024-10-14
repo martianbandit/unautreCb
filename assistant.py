@@ -29,24 +29,34 @@ def chat_with_assistant(input_text, assistant, temp, file_upload, chat_history):
     # Préparer l'historique des messages pour l'API ChatCompletion
     messages = [{"role": "system", "content": f"Tu es un assistant nommé {assistant} spécialisé dans le domaine de la mécanique."}]
     
-    # Ajouter l'historique des messages existant
-    if chat_history is not None:
-        for user_message, assistant_message in chat_history:
+    # Limiter l'historique des messages pour améliorer les performances
+    if chat_history:
+        for user_message, assistant_message in chat_history[-5:]:  # Conserver uniquement les 5 derniers échanges
             messages.append({"role": "user", "content": user_message})
             messages.append({"role": "assistant", "content": assistant_message})
     
     # Ajouter le message utilisateur actuel
     messages.append({"role": "user", "content": input_text})
-    
+
+    # Valider les fichiers uploadés (ici on vérifie si c'est une image)
+    if file_upload:
+        if file_upload.type not in ['image/png', 'image/jpeg']:
+            return [("Erreur", "Format de fichier non supporté. Veuillez télécharger une image au format PNG ou JPEG.")]
+
     # Appel à l'API OpenAI
     try:
+        # Utilisation du stream pour recevoir les réponses en temps réel
         response = openai.ChatCompletion.create(
             model="gpt-4",  # Ou gpt-3.5-turbo si vous avez accès
             messages=messages,
             temperature=temp,
             max_tokens=1500,
+            stream=True  # Activer le streaming
         )
-        response_text = response.choices[0].message["content"].strip()
+        response_text = ""
+        for chunk in response:
+            if 'content' in chunk['choices'][0]['delta']:
+                response_text += chunk['choices'][0]['delta']['content']
 
         # Réponse personnalisée avec icône
         response_text = f"{'🤖' if assistant == 'OBD2 Diagnostic' else '👨‍💻'} {response_text}"
@@ -75,7 +85,7 @@ with gr.Blocks() as interface:
             contrast_mode = gr.Radio(label="Mode Contraste de l'application:", choices=["Clair", "Sombre"], value="Clair")
             assistant_choice = gr.Radio(label="Sélectionnez un Assistant:", choices=assistants, value=assistants[0])
             file_upload = gr.File(label="Télécharger une image ou fichier:", height=150)
-            temperature = gr.Slider(label="Température du modèle", minimum=0, maximum=1, value=0.7, step=0.1)
+            temperature = gr.Slider(label="Température du modèle", minimum=0, maximum=1, value=0.7, step=0.1, live=True)
 
         with gr.Column():
             chat_window = gr.Chatbot(label="Chat", height=400)
@@ -96,5 +106,3 @@ with gr.Blocks() as interface:
 
 # Lancer l'interface Gradio
 interface.launch()
-
-
