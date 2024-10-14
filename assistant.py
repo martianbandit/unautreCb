@@ -46,7 +46,7 @@ def chat_with_assistant(input_text, assistant, temp, file_upload, chat_history):
     # Appel à l'API OpenAI
     try:
         # Utilisation du stream pour recevoir les réponses en temps réel
-        response = openai.ChatCompletion.create(
+        response = openai.Chat.Completion.create(
             model="gpt-4",  # Ou gpt-3.5-turbo si vous avez accès
             messages=messages,
             temperature=temp,
