@@ -85,8 +85,7 @@ with gr.Blocks() as interface:
             contrast_mode = gr.Radio(label="Mode Contraste de l'application:", choices=["Clair", "Sombre"], value="Clair")
             assistant_choice = gr.Radio(label="Sélectionnez un Assistant:", choices=assistants, value=assistants[0])
             file_upload = gr.File(label="Télécharger une image ou fichier:", height=150)
-            temperature = gr.Slider(label="Température du modèle", minimum=0, maximum=1, value=0.7, step=0.1, live=True)
-
+            temperature = gr.Slider(label="Température du modèle", minimum=0, maximum=1, value=0.7, step=0.1,)
         with gr.Column():
             chat_window = gr.Chatbot(label="Chat", height=400)
             user_input = gr.Textbox(label="Votre message ici", placeholder="Tapez votre question...")
