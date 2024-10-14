@@ -11,7 +11,10 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 # ID des assistants (Remplacez par vos vrais IDs)
 assistant_ids = {
     "GPTBay": "asst_jkf2zv9jlzYj4prJ7dHECOWL",
-    "specialiste_du_vrac": "asst_HSUZYtNegNGOfXRC3p7NqInX"
+    "specialiste_du_vrac": "asst_HSUZYtNegNGOfXRC3p7NqInX",
+    "Scraping and Crawling Expert Code (RAG)": "asst_Lt1AWleH509FJYTVu0sy9AUE",
+    "Hybrid Designer": "asst_5l3HvMS8AoKRahvrhph1Z5L0",
+    "Math tuthor": "asst_9vmMiolEozJTNjQN4LBBM3AX"
 }
 
 # Fonction pour interroger l'API OpenAI en utilisant l'ID de l'assistant
