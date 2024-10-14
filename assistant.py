@@ -19,35 +19,43 @@ assistant_ids = {
 }
 
 # Fonction pour interroger l'API OpenAI en utilisant l'ID de l'assistant
-def chat_with_assistant(input_text, assistant, temp, file_upload):
+def chat_with_assistant(input_text, assistant, temp, file_upload, chat_history):
 
     if assistant not in assistant_ids:
         return [("Erreur", f"L'assistant '{assistant}' n'est pas valide.")]
 
     assistant_id = assistant_ids[assistant]  # Récupérer l'ID de l'assistant sélectionné
     
-    # Créer le prompt en fonction de l'assistant sélectionné
-    prompt = f"Utilisateur: {input_text}\nAssistant ({assistant_id}):"
+    # Préparer l'historique des messages pour l'API ChatCompletion
+    messages = [{"role": "system", "content": f"Tu es un assistant nommé {assistant} spécialisé dans le domaine de la mécanique."}]
+    
+    # Ajouter l'historique des messages existant
+    if chat_history is not None:
+        for user_message, assistant_message in chat_history:
+            messages.append({"role": "user", "content": user_message})
+            messages.append({"role": "assistant", "content": assistant_message})
+    
+    # Ajouter le message utilisateur actuel
+    messages.append({"role": "user", "content": input_text})
     
     # Appel à l'API OpenAI
     try:
-        response = openai.Completion.create(
-            engine="text-davinci-003",  # Ou GPT-4 si vous avez accès
-            prompt=prompt,
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # Ou gpt-3.5-turbo si vous avez accès
+            messages=messages,
             temperature=temp,
             max_tokens=1500,
-            n=1,
-            stop=["Utilisateur:", "Assistant:"]
         )
-        response_text = response.choices[0].text.strip()
+        response_text = response.choices[0].message["content"].strip()
 
         # Réponse personnalisée avec icône
         response_text = f"{'🤖' if assistant == 'OBD2 Diagnostic' else '👨‍💻'} {response_text}"
         
         if file_upload:
             response_text += f"\nVous avez téléchargé une image : {file_upload.name}."
-            
-        return [(input_text, response_text)]
+        
+        chat_history.append((input_text, response_text))
+        return chat_history
     
     except Exception as e:
         return [("Erreur", f"Erreur avec l'API OpenAI: {str(e)}")]
@@ -82,9 +90,10 @@ with gr.Blocks() as interface:
     # Action du bouton envoyer
     send_button.click(
         chat_with_assistant,
-        inputs=[user_input, assistant_choice, temperature, file_upload],
+        inputs=[user_input, assistant_choice, temperature, file_upload, chat_window],
         outputs=chat_window
     )
 
 # Lancer l'interface Gradio
 interface.launch()
+
