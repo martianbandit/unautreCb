@@ -14,7 +14,8 @@ assistant_ids = {
     "specialiste_du_vrac": "asst_HSUZYtNegNGOfXRC3p7NqInX",
     "Scraping and Crawling Expert Code (RAG)": "asst_Lt1AWleH509FJYTVu0sy9AUE",
     "Hybrid Designer": "asst_5l3HvMS8AoKRahvrhph1Z5L0",
-    "Math tuthor": "asst_9vmMiolEozJTNjQN4LBBM3AX"
+    "Math tuthor": "asst_9vmMiolEozJTNjQN4LBBM3AX",
+    "SaaS starter": "asst_Lt1AWleH509FJYTVu0sy9AUE"
 }
 
 # Fonction pour interroger l'API OpenAI en utilisant l'ID de l'assistant
