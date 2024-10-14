@@ -50,7 +50,7 @@ def chat_with_assistant(input_text, assistant, temp, contrast, image):
         return f"Erreur avec l'API OpenAI: {str(e)}"
 
 # Liste des assistants disponibles
-assistants = ["GPTBay", "specialiste_du_vrac"]
+assistants = ["GPTBay", "specialiste_du_vrac","Scraping and Crawling Expert Code (RAG)","Hybrid Designer","SaaS starter","Math tuthor"]
 
 # Interface utilisateur avec Gradio
 with gr.Blocks() as interface:
