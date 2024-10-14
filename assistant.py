@@ -4,8 +4,8 @@ import gradio as gr
 from dotenv import load_dotenv
 import os
 
+# Charger les variables d'environnement
 load_dotenv()
-# Votre clé API OpenAI (remplacez-la par la vôtre)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # ID des assistants (Remplacez par vos vrais IDs)
@@ -96,4 +96,5 @@ with gr.Blocks() as interface:
 
 # Lancer l'interface Gradio
 interface.launch()
+
 
