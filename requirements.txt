@@ -1,7 +1,9 @@
 openai
-gradio
+streamlit
 crewai 
 langchain-openai 
 duckduckgo-search 
 newspaper3k
 crewai_tools
+google.ai.generativelanguage
+google-generativeai
