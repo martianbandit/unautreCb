@@ -1,184 +1,190 @@
 import os
-import gradio as gr
-import requests
-from crewai import Agent, Task, Crew, Process
+import time
+import streamlit as st
+import google.generativeai as genai
+from google.ai.generativelanguage_v1beta.types import content
 
-from langchain_openai import ChatOpenAI
+##############################################
+# Configuration et fonctions utilitaires
+##############################################
 
-from langchain_community.tools import DuckDuckGoSearchRun, DuckDuckGoSearchResults
-from crewai_tools import tool, SeleniumScrapingTool, ScrapeWebsiteTool
-from duckduckgo_search import DDGS
+# Configuration de l'API Gemini
+if "GEMINI_API_KEY" not in os.environ:
+    st.error("Veuillez définir la variable d'environnement GEMINI_API_KEY avant de lancer l'application.")
+    st.stop()
 
-from newspaper import Article
+genai.configure(api_key=os.environ["GEMINI_API_KEY"])
 
-# S'assurer que les variables d'environnement essentielles sont définies
-openai_api_key = os.getenv('OPENAI_API_KEY')
-if not openai_api_key:
-    raise EnvironmentError("OPENAI_API_KEY n'est pas définie dans les variables d'environnement")
+def upload_to_gemini(path, mime_type=None):
+    """Uploads the given file to Gemini."""
+    file = genai.upload_file(path, mime_type=mime_type)
+    return file
 
-def fetch_content(url):
-    try:
-        article = Article(url)
-        article.download()
-        article.parse()
-        return article.text
-    except Exception as e:
-        print("ERREUR: " + str(e))
-        return f"Erreur lors de la récupération du contenu : {e}"
+def wait_for_files_active(files):
+    """Wait until all files are ACTIVE."""
+    st.write("En attente du traitement des fichiers…")
+    for file in files:
+        name = file.name
+        f = genai.get_file(name)
+        while f.state.name == "PROCESSING":
+            time.sleep(5)
+            f = genai.get_file(name)
+        if f.state.name != "ACTIVE":
+            raise Exception(f"Le fichier {f.name} n'a pas pu être activé.")
+    st.write("Tous les fichiers sont actifs et prêts à l'emploi.")
+    return files
 
-# Définir l'outil de recherche DuckDuckGo
-@tool('DuckDuckGoSearchResults')
-def search_results(search_query: str) -> dict:
-    """
-    Effectue une recherche web pour rassembler et retourner une collection de résultats de recherche.
-    Cet outil automatise la récupération d'informations web liées à une requête spécifiée.
-    Args:
-    - search_query (str): La chaîne de requête qui spécifie l'information à rechercher sur le web. Cela devrait être une expression claire et concise des besoins d'information de l'utilisateur.
-    Retourne:
-    - list: Une liste de dictionnaires, où chaque dictionnaire représente un résultat de recherche. Chaque dictionnaire inclut un 'extrait' de la page et le 'lien' avec l'url correspondante.
-    """
-    results = DDGS().text(search_query, max_results=5, timelimit='m')
-    results_list = [{"title": result['title'], "snippet": result['body'], "link": result['href']} for result in results]
-    return results_list
+# Configuration du modèle
+generation_config = {
+  "temperature": 1,
+  "top_p": 0.95,
+  "top_k": 64,
+  "max_output_tokens": 8192,
+  "response_mime_type": "text/plain",
+}
 
-@tool('WebScrapper')
-def web_scrapper(url: str, topic: str) -> str:
-    """
-    Un outil conçu pour extraire et lire le contenu d'un lien spécifié et générer un résumé sur un sujet spécifique.
-    Il est capable de traiter divers types de pages web en faisant des requêtes HTTP et en analysant le contenu HTML reçu.
-    Cet outil est particulièrement utile pour les tâches de web scraping, la collecte de données, ou l'extraction d'informations spécifiques de sites web.
+model = genai.GenerativeModel(
+  model_name="gemini-1.5-flash",
+  generation_config=generation_config,
+  tools = [
+    genai.protos.Tool(
+      function_declarations = [],
+    ),
+  ],
+)
+
+##############################################
+# Interface Streamlit
+##############################################
+
+st.title("Application interactive avec Gemini")
+
+st.write("Cette application permet de :")
+st.write("- Uploader des fichiers vidéo vers l'API Gemini.")
+st.write("- Attendre leur activation.")
+st.write("- Interagir avec un modèle de langage afin de poser des questions sur le contenu vidéo.")
+st.write("Le snippet original est répliqué avec une interface utilisateur plus conviviale.")
+
+# Zone d’upload de fichiers
+uploaded_files = st.file_uploader(
+    "Chargez un ou plusieurs fichiers (vidéo) :",
+    type=["webm", "mov", "mp4"],
+    accept_multiple_files=True
+)
+
+if "uploaded_to_gemini" not in st.session_state:
+    st.session_state["uploaded_to_gemini"] = False
+
+if "gemini_files" not in st.session_state:
+    st.session_state["gemini_files"] = []
+
+if "chat_session" not in st.session_state:
+    st.session_state["chat_session"] = None
+
+# Bouton pour envoyer les fichiers à Gemini
+if st.button("Envoyer et traiter les fichiers sur Gemini") and uploaded_files:
+    # Sauvegarde temporaire des fichiers
+    local_paths = []
+    for uf in uploaded_files:
+        # Enregistrer le fichier localement
+        with open(uf.name, "wb") as f:
+            f.write(uf.read())
+        local_paths.append(uf.name)
     
-    Args:
-    - url (str): L'URL à partir de laquelle scraper le contenu.
-    - topic (str): Le sujet spécifique sur lequel générer un résumé.
-    Retourne:
-    - summary (str): résumé de l'url sur le sujet
-    """
-    # Scraper le contenu de l'URL spécifiée
-    content = fetch_content(url)
+    # Upload sur Gemini
+    gemini_files = []
+    for path in local_paths:
+        # Déduire le type MIME de base
+        if path.endswith(".webm"):
+            mime = "video/webm"
+        elif path.endswith(".mov"):
+            mime = "video/quicktime"
+        elif path.endswith(".mp4"):
+            mime = "video/mp4"
+        else:
+            mime = None
+        f = upload_to_gemini(path, mime_type=mime)
+        gemini_files.append(f)
+        st.write(f"Fichier '{path}' uploadé : {f.uri}")
+
+    # Attente de l'activation des fichiers
+    active_files = wait_for_files_active(gemini_files)
+    st.session_state["gemini_files"] = active_files
+    st.session_state["uploaded_to_gemini"] = True
+
+# Une fois les fichiers traités, on peut initialiser la session de chat
+if st.session_state["uploaded_to_gemini"] and st.session_state["chat_session"] is None:
+    # Créez une session de chat semblable à l'exemple
+    # Ajoutons un historique par défaut basé sur l'exemple
+    # Ici on suppose que le premier fichier est utilisé dans le contexte
+    files = st.session_state["gemini_files"]
     
-    # Préparer le prompt pour générer le résumé
-    prompt = f"Générez un résumé du contenu suivant sur le sujet ## {topic} ### \n\nCONTENU:\n\n" + content
-    
-    # Générer le résumé en utilisant OpenAI (GPT-3.5-turbo pour cet exemple)
-    openai_client = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0.4)
-    response = openai_client.predict(prompt)
+    # Historique par défaut comme dans le snippet
+    history = [
+        {
+          "role": "user",
+          "parts": [files[0]] if len(files) > 0 else [],
+        },
+        {
+          "role": "user",
+          "parts": [
+              "Using this video, please answer the below questions:\n\n1. Who is the main subject of the video?\n2. List out how Ashley navigated her trip.\n3. At what timestamp did musicians appear playing instruments?",
+          ],
+        },
+        {
+          "role": "model",
+          "parts": [
+              "Here are the answers based on the video:\n\n1. The main subject of the video is Ashley, a woman going on a trip to Barcelona.\n\n\n2. Ashley navigated her trip using the Google Trips app.  This allowed her to:\n    * Access her itinerary offline, including flight and hotel information.\n    * View a map of her saved places.\n    * Create a personalized itinerary for each day, including travel time to each location.\n    * Find a restaurant recommended by a friend.\n\n\n3. Musicians playing instruments appear at timestamp 0:33 and again at 1:33.",
+          ],
+        },
+    ]
 
-    summary_response = f"""###
-    Résumé:
-    {response}
-    
-    URL: {url}
-    ###
-    """
-    
-    return summary_response
+    # Ajout du second fichier et des messages utilisateurs/modèle liés
+    if len(files) > 1:
+        history.extend([
+            {
+              "role": "user",
+              "parts": [files[1]],
+            },
+            {
+              "role": "user",
+              "parts": [
+                "Raconte se qui se passe dans le video",
+              ],
+            },
+            {
+              "role": "model",
+              "parts": [
+                "Bien sûr, voici une description du contenu de la vidéo :\n\nLa vidéo montre un gros plan d’une roue de camion sale et rouillée. La roue est blanche avec des taches de rouille. Le pneu est noir et semble usé. Le sol sous la roue est également sale et de couleur brun foncé.",
+              ],
+            },
+            {
+              "role": "user",
+              "parts": [
+                "Esce que quelque choses semble dangereux?"
+              ],
+            },
+            {
+              "role": "model",
+              "parts": [
+                "Oui, il y a quelques éléments dangereux potentiels dans la vidéo :\n\n* **Rouille :** ...\n* **Usure des pneus :** ...\n"
+              ],
+            },
+        ])
 
-def kickoff_crew(topic: str, model_choice: str) -> str:
-    try:
-        # Initialiser les modèles de langage en fonction du choix de l'utilisateur
-        llm = ChatOpenAI(temperature=0, model_name=model_choice)
-    
-        # Définir les Agents avec le LLM OpenAI
-        researcher = Agent(
-            role='Chercheur',
-            goal='Rechercher et collecter des informations détaillées sur le sujet ## {topic} ##',
-            tools=[search_results, web_scrapper],
-            llm=llm,
-            backstory=(
-                "Vous êtes un chercheur méticuleux, doué pour naviguer dans de vastes quantités d'informations afin d'extraire des insights essentiels sur n'importe quel sujet donné. "
-                "Votre dévouement au détail assure la fiabilité et l'exhaustivité de vos découvertes. "
-                "Avec une approche stratégique, vous analysez et documentez soigneusement les données, visant à fournir des résultats précis et dignes de confiance."
-            ),
-            allow_delegation=False,
-            max_iter=15,
-            max_rpm=20,
-            memory=True,
-            verbose=True
-        )
+    st.session_state["chat_session"] = model.start_chat(history=history)
+    st.success("Session de chat initialisée avec l'historique!")
 
-        editor = Agent(
-            role='Éditeur',
-            goal='Compiler et affiner les informations en un rapport complet sur le sujet ## {topic} ##',
-            llm=llm,
-            backstory=(
-                "En tant qu'éditeur expert, vous vous spécialisez dans la transformation de données brutes en rapports clairs et engageants. "
-                "Votre forte maîtrise du langage et votre attention aux détails garantissent que chaque rapport non seulement transmet des insights essentiels "
-                "mais est également facilement compréhensible et attrayant pour divers publics. "
-            ),
-            allow_delegation=False,
-            max_iter=5,
-            max_rpm=15,
-            memory=True,
-            verbose=True
-        )
-        
-        # Définir les Tâches
-        research_task = Task(
-            description=(
-                "Utilisez l'outil DuckDuckGoSearchResults pour collecter des extraits de recherche initiaux sur ## {topic} ##. "
-                "Si des recherches plus détaillées sont nécessaires, générez et exécutez de nouvelles requêtes liées à ## {topic} ##. "
-                "Ensuite, utilisez l'outil WebScrapper pour approfondir les URL importantes identifiées à partir des extraits, en extrayant plus d'informations et d'insights. "
-                "Compilez ces découvertes en un brouillon préliminaire, en documentant toutes les sources pertinentes, les titres et les liens associés au sujet. "
-                "Assurez une haute précision tout au long du processus et évitez toute fabrication ou représentation erronée de l'information."
-            ),
-            expected_output=(
-                "Un rapport brouillon structuré sur le sujet, comportant une introduction, un corps principal détaillé organisé selon différents aspects du sujet, et une conclusion. "
-                "Chaque section doit citer correctement les sources, fournissant un aperçu complet des informations recueillies."
-            ),
-            agent=researcher
-        )
+##############################################
+# Interaction avec le modèle
+##############################################
 
-        
-        edit_task = Task(
-            description=(
-                "Examinez et affinez le rapport brouillon initial de la tâche de recherche. Organisez le contenu de manière logique pour améliorer le flux d'information. "
-                "Vérifiez l'exactitude de toutes les données, corrigez les divergences et mettez à jour les informations pour vous assurer qu'elles reflètent les connaissances actuelles et sont bien étayées par des sources. "
-                "Améliorez la lisibilité du rapport en renforçant la clarté du langage, en ajustant les structures des phrases et en maintenant un ton cohérent. "
-                "Incluez une section listant toutes les sources utilisées, formatée en points suivant ce modèle : "
-                "- titre : url'."
-            ),
-            expected_output=(
-                "Un rapport poli et complet sur le sujet ## {topic} ##, avec un récit clair et professionnel qui reflète fidèlement les résultats de la recherche. "
-                "Le rapport doit inclure une introduction, une section de discussion approfondie, une conclusion concise et une liste de sources bien organisée. "
-                "Assurez-vous que le document est grammaticalement correct et prêt pour la publication ou la présentation."
-            ),
-            agent=editor,
-            context=[research_task]
-        )
-    
-        # Former l'équipe
-        crew = Crew(
-            agents=[researcher, editor],
-            tasks=[research_task, edit_task],
-            process=Process.sequential,
-        )
-    
-        # Lancer le processus de recherche
-        result = crew.kickoff(inputs={'topic': topic})
-        if not isinstance(result, str):
-            result = str(result)
-        return result
-    except Exception as e:
-        return f"Erreur : {str(e)}"
-
-
-def main():
-    """Configurer l'interface Gradio pour l'outil de recherche CrewAI."""
-    with gr.Blocks() as demo:
-        gr.Markdown("## Outil de Recherche CrewAI")
-        topic_input = gr.Textbox(label="Entrez le sujet", placeholder="Tapez ici...")
-        model_choice = gr.Radio(choices=["gpt-3.5-turbo", "gpt-4"], label="Choisissez le modèle")
-        submit_button = gr.Button("Démarrer la recherche")
-        output = gr.Markdown(label="Résultat")
-
-        submit_button.click(
-            fn=kickoff_crew,
-            inputs=[topic_input, model_choice],
-            outputs=output
-        )
-
-    demo.launch()
-
-if __name__ == "__main__":
-    main()
+if st.session_state["chat_session"] is not None:
+    user_input = st.text_input("Entrez votre message pour le modèle :")
+    if st.button("Envoyer"):
+        if user_input.strip():
+            response = st.session_state["chat_session"].send_message(user_input)
+            st.write("**Réponse du modèle :**")
+            st.write(response.text)
+        else:
+            st.warning("Veuillez entrer une question ou un message.")
