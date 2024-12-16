@@ -2,7 +2,7 @@ import os
 import time
 import streamlit as st
 import google.generativeai as genai
-from google.ai.generativelanguage_v1beta.types import content
+
 
 ##############################################
 # Configuration et fonctions utilitaires
@@ -36,10 +36,10 @@ def wait_for_files_active(files):
 
 # Configuration du modèle
 generation_config = {
-  "temperature": 1,
+  "temperature": .45,
   "top_p": 0.95,
   "top_k": 64,
-  "max_output_tokens": 8192,
+  "max_output_tokens": 8160,
   "response_mime_type": "text/plain",
 }
 
