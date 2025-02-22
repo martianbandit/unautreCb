@@ -1,174 +1,125 @@
+import os
 import streamlit as st
-from crewai import Crew, Agent, Task
-from pytrends.request import TrendReq
-import matplotlib.pyplot as plt
-import pandas as pd
-from io import BytesIO
-import base64
-from fpdf import FPDF
-from crewai.tools import tool
+from textwrap import dedent
+from dotenv import load_dotenv
+from crewai import Agent, Task, Crew, Process
+from crewai_tools import SerperDevTool
+from langchain.llms import Ollama
 
-# ---------- 🔹 1. Définition des outils 🔹 ---------- #
+# Charger les variables d'environnement
+load_dotenv()
+MODEL = os.getenv('MODEL', 'mistral')
 
-@tool("Google Trends Analysis")
-def google_trends_analysis(keyword: str, geo: str = "US", timeframe: str = "today 3-m") -> dict:
-    """Analyse les tendances Google Trends pour un mot-clé donné."""
-    pytrends = TrendReq()
-    pytrends.build_payload([keyword], geo=geo, timeframe=timeframe)
+# Initialisation du modèle LLM
+llm = Ollama(model=MODEL)
 
-    trends_data = pytrends.interest_over_time()
-    if not trends_data.empty:
-        return trends_data[keyword].to_dict()
-    else:
-        return {"error": "Aucune donnée trouvée"}
+# Définition des outils
+search_tool = SerperDevTool()
 
-@tool("Data Visualization")
-def visualize_trends(trends_data: dict) -> str:
-    """Génère un graphique et le retourne encodé en base64."""
-    if "error" in trends_data:
-        return trends_data["error"]
+# Création des agents
+def create_agents():
+    return {
+        "Lead Market Analyst": Agent(
+            role="Lead Market Analyst",
+            goal="Analyser les produits et concurrents pour fournir des insights marketing.",
+            backstory="Expert en analyse de marché, vous scrutez les tendances et identifiez les opportunités.",
+            tools=[search_tool],
+            llm=llm,
+            verbose=True
+        ),
+        "Chief Marketing Strategist": Agent(
+            role="Chief Marketing Strategist",
+            goal="Synthétiser les analyses pour formuler des stratégies marketing innovantes.",
+            backstory="Stratège marketing reconnu, vous créez des campagnes percutantes.",
+            tools=[search_tool],
+            llm=llm,
+            verbose=True
+        ),
+        "Creative Content Creator": Agent(
+            role="Creative Content Creator",
+            goal="Créer du contenu engageant pour les réseaux sociaux.",
+            backstory="Spécialiste en storytelling digital, vous transformez les idées en visuels attractifs.",
+            tools=[search_tool],
+            llm=llm,
+            verbose=True
+        ),
+        "Senior Photographer": Agent(
+            role="Senior Photographer",
+            goal="Capturer des images percutantes pour les publicités Instagram.",
+            backstory="Photographe chevronné, vous donnez vie aux produits grâce à vos clichés.",
+            tools=[search_tool],
+            llm=llm,
+            verbose=True
+        ),
+        "Chief Creative Director": Agent(
+            role="Chief Creative Director",
+            goal="Superviser et approuver le contenu créé par l'équipe marketing.",
+            backstory="Directeur artistique expérimenté, vous assurez la cohérence et la qualité des productions.",
+            tools=[search_tool],
+            llm=llm,
+            verbose=True
+        ),
+    }
 
-    df = pd.DataFrame.from_dict(trends_data, orient='index', columns=['Interest'])
-    df.index = pd.to_datetime(df.index)
+# Création des tâches
+def create_tasks(agents):
+    return {
+        "Competitor Analysis": Task(
+            description="Réaliser une analyse approfondie des concurrents pour identifier les tendances et opportunités.",
+            expected_output="Un rapport structuré des forces et faiblesses des concurrents.",
+            tools=[search_tool],
+            agent=agents["Lead Market Analyst"]
+        ),
+        "Strategy Planning": Task(
+            description="Élaborer une stratégie marketing basée sur l'analyse concurrentielle.",
+            expected_output="Un document avec des recommandations stratégiques détaillées.",
+            tools=[search_tool],
+            agent=agents["Chief Marketing Strategist"]
+        ),
+        "Content Creation": Task(
+            description="Produire du contenu créatif et engageant pour les réseaux sociaux.",
+            expected_output="Un ensemble de visuels et textes adaptés aux campagnes Instagram.",
+            tools=[search_tool],
+            agent=agents["Creative Content Creator"]
+        ),
+        "Photography": Task(
+            description="Prendre des photos percutantes alignées avec la stratégie marketing.",
+            expected_output="Une série d'images professionnelles prêtes à être utilisées dans les publicités.",
+            tools=[search_tool],
+            agent=agents["Senior Photographer"]
+        ),
+        "Review & Approval": Task(
+            description="Vérifier et valider les productions de l'équipe avant publication.",
+            expected_output="Un feedback détaillé et une version finale approuvée du contenu.",
+            tools=[search_tool],
+            agent=agents["Chief Creative Director"]
+        ),
+    }
 
-    plt.figure(figsize=(10, 5))
-    plt.plot(df.index, df["Interest"], marker='o', linestyle='-', color='b')
-    plt.title("Tendances Google Trends")
-    plt.xlabel("Date")
-    plt.ylabel("Intérêt")
-    plt.xticks(rotation=45)
-    plt.grid()
+# Interface Streamlit
+st.title("🚀 Marketing CrewAI avec Streamlit")
 
-    img_buffer = BytesIO()
-    plt.savefig(img_buffer, format="png")
-    plt.close()
+if st.button("Lancer l'Analyse Marketing"):
+    st.write("🔍 Initialisation des agents et des tâches...")
+
+    # Instanciation des agents et des tâches
+    agents = create_agents()
+    tasks = create_tasks(agents)
+
+    # Création du Crew
+    crew = Crew(
+        agents=list(agents.values()),
+        tasks=list(tasks.values()),
+        process=Process.sequential
+    )
+
+    st.write("🛠️ Exécution du workflow...")
     
-    return base64.b64encode(img_buffer.getvalue()).decode("utf-8")
+    # Exécution du Crew avec un sujet générique
+    result = crew.kickoff(inputs={'topic': 'Marketing Digital'})
 
-@tool("PDF Report Generation")
-def generate_pdf_report(trends_data: dict, graph_base64: str) -> str:
-    """Crée un rapport PDF avec les tendances et l'image du graphique."""
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(200, 10, "Rapport de Tendances Google Trends", ln=True, align="C")
+    # Affichage du résultat
+    st.subheader("📊 Résultats de l'analyse marketing :")
+    st.write(result)
 
-    pdf.set_font("Arial", "", 12)
-    pdf.ln(10)
-    pdf.cell(200, 10, "Analyse des tendances récentes:", ln=True)
-    
-    for date, interest in trends_data.items():
-        pdf.cell(200, 10, f"{date}: {interest}", ln=True)
-
-    if graph_base64:
-        image_data = base64.b64decode(graph_base64)
-        image_path = "temp_graph.png"
-        with open(image_path, "wb") as f:
-            f.write(image_data)
-        pdf.image(image_path, x=10, y=pdf.get_y(), w=180)
-
-    pdf_path = "trend_report.pdf"
-    pdf.output(pdf_path)
-    return pdf_path
-
-# ---------- 🔹 2. Création des Agents CrewAI 🔹 ---------- #
-
-trend_research_agent = Agent(
-    role="Analyste des tendances",
-    goal="Extraire les tendances des recherches Google.",
-    tools=[google_trends_analysis],
-    memory=True, verbose=True, max_iter=3
-)
-
-data_analyst_agent = Agent(
-    role="Analyste de données",
-    goal="Créer des visualisations des tendances.",
-    tools=[visualize_trends],
-    memory=True, verbose=True, max_iter=2
-)
-
-report_writer_agent = Agent(
-    role="Rédacteur de rapports",
-    goal="Générer un rapport détaillé.",
-    tools=[generate_pdf_report],
-    memory=True, verbose=True, max_iter=2
-)
-
-marketing_strategist_agent = Agent(
-    role="Stratégiste Marketing",
-    goal="Déduire des recommandations commerciales.",
-    memory=True, verbose=True, max_iter=2
-)
-
-# ---------- 🔹 3. Définition des tâches CrewAI 🔹 ---------- #
-
-extract_trends_task = Task(
-    description="Extraire les tendances Google Trends pour un mot-clé.",
-    expected_output="Données des tendances.",
-    agent=trend_research_agent,
-    async_execution=True
-)
-
-generate_visuals_task = Task(
-    description="Créer un graphique des tendances.",
-    expected_output="Image graphique.",
-    agent=data_analyst_agent,
-    context=[extract_trends_task]
-)
-
-write_report_task = Task(
-    description="Rédiger un rapport détaillé basé sur les tendances et analyses visuelles.",
-    expected_output="Rapport PDF.",
-    agent=report_writer_agent,
-    context=[generate_visuals_task]
-)
-
-generate_strategy_task = Task(
-    description="Proposer des recommandations marketing.",
-    expected_output="Stratégie commerciale.",
-    agent=marketing_strategist_agent,
-    context=[write_report_task]
-)
-
-# ---------- 🔹 4. Création du CrewAI 🔹 ---------- #
-
-trend_analysis_crew = Crew(
-    agents=[trend_research_agent, data_analyst_agent, report_writer_agent, marketing_strategist_agent],
-    tasks=[extract_trends_task, generate_visuals_task, write_report_task, generate_strategy_task],
-    verbose=True
-)
-
-# ---------- 🔹 5. Interface Streamlit 🔹 ---------- #
-
-st.title("🔍 Analyse des Tendances Google Trends")
-keyword = st.text_input("Entrez un mot-clé pour analyser la tendance :")
-
-if st.button("Lancer l'analyse"):
-    if keyword:
-        # Exécuter CrewAI
-        result = trend_analysis_crew.kickoff()
-        
-        # Récupération des résultats
-        trends_data = google_trends_analysis(keyword)
-        graph_base64 = visualize_trends(trends_data)
-        pdf_path = generate_pdf_report(trends_data, graph_base64)
-
-        # Affichage des résultats
-        st.subheader("📊 Graphique des tendances")
-        if "error" not in graph_base64:
-            img_data = base64.b64decode(graph_base64)
-            st.image(img_data, caption="Tendances Google Trends", use_column_width=True)
-        else:
-            st.warning("Aucune donnée trouvée pour ce mot-clé.")
-
-        st.subheader("📄 Rapport de tendances")
-        with open(pdf_path, "rb") as pdf_file:
-            pdf_bytes = pdf_file.read()
-        st.download_button(label="📥 Télécharger le rapport PDF", data=pdf_bytes, file_name="trend_report.pdf")
-
-        st.subheader("🎯 Recommandations stratégiques")
-        st.write(result)
-
-    else:
-        st.warning("Veuillez entrer un mot-clé.")
+st.write("Appuyez sur le bouton ci-dessus pour lancer l'analyse marketing complète.")
