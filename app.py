@@ -1,190 +1,174 @@
-import os
-import time
 import streamlit as st
-import google.generativeai as genai
+from crewai import Crew, Agent, Task
+from pytrends.request import TrendReq
+import matplotlib.pyplot as plt
+import pandas as pd
+from io import BytesIO
+import base64
+from fpdf import FPDF
+from crewai.tools import tool
 
+# ---------- 🔹 1. Définition des outils 🔹 ---------- #
 
-##############################################
-# Configuration et fonctions utilitaires
-##############################################
+@tool("Google Trends Analysis")
+def google_trends_analysis(keyword: str, geo: str = "US", timeframe: str = "today 3-m") -> dict:
+    """Analyse les tendances Google Trends pour un mot-clé donné."""
+    pytrends = TrendReq()
+    pytrends.build_payload([keyword], geo=geo, timeframe=timeframe)
 
-# Configuration de l'API Gemini
-if "GEMINI_API_KEY" not in os.environ:
-    st.error("Veuillez définir la variable d'environnement GEMINI_API_KEY avant de lancer l'application.")
-    st.stop()
+    trends_data = pytrends.interest_over_time()
+    if not trends_data.empty:
+        return trends_data[keyword].to_dict()
+    else:
+        return {"error": "Aucune donnée trouvée"}
 
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+@tool("Data Visualization")
+def visualize_trends(trends_data: dict) -> str:
+    """Génère un graphique et le retourne encodé en base64."""
+    if "error" in trends_data:
+        return trends_data["error"]
 
-def upload_to_gemini(path, mime_type=None):
-    """Uploads the given file to Gemini."""
-    file = genai.upload_file(path, mime_type=mime_type)
-    return file
+    df = pd.DataFrame.from_dict(trends_data, orient='index', columns=['Interest'])
+    df.index = pd.to_datetime(df.index)
 
-def wait_for_files_active(files):
-    """Wait until all files are ACTIVE."""
-    st.write("En attente du traitement des fichiers…")
-    for file in files:
-        name = file.name
-        f = genai.get_file(name)
-        while f.state.name == "PROCESSING":
-            time.sleep(5)
-            f = genai.get_file(name)
-        if f.state.name != "ACTIVE":
-            raise Exception(f"Le fichier {f.name} n'a pas pu être activé.")
-    st.write("Tous les fichiers sont actifs et prêts à l'emploi.")
-    return files
+    plt.figure(figsize=(10, 5))
+    plt.plot(df.index, df["Interest"], marker='o', linestyle='-', color='b')
+    plt.title("Tendances Google Trends")
+    plt.xlabel("Date")
+    plt.ylabel("Intérêt")
+    plt.xticks(rotation=45)
+    plt.grid()
 
-# Configuration du modèle
-generation_config = {
-  "temperature": .45,
-  "top_p": 0.95,
-  "top_k": 64,
-  "max_output_tokens": 8160,
-  "response_mime_type": "text/plain",
-}
+    img_buffer = BytesIO()
+    plt.savefig(img_buffer, format="png")
+    plt.close()
+    
+    return base64.b64encode(img_buffer.getvalue()).decode("utf-8")
 
-model = genai.GenerativeModel(
-  model_name="gemini-1.5-flash",
-  generation_config=generation_config,
-  tools = [
-    genai.protos.Tool(
-      function_declarations = [],
-    ),
-  ],
+@tool("PDF Report Generation")
+def generate_pdf_report(trends_data: dict, graph_base64: str) -> str:
+    """Crée un rapport PDF avec les tendances et l'image du graphique."""
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(200, 10, "Rapport de Tendances Google Trends", ln=True, align="C")
+
+    pdf.set_font("Arial", "", 12)
+    pdf.ln(10)
+    pdf.cell(200, 10, "Analyse des tendances récentes:", ln=True)
+    
+    for date, interest in trends_data.items():
+        pdf.cell(200, 10, f"{date}: {interest}", ln=True)
+
+    if graph_base64:
+        image_data = base64.b64decode(graph_base64)
+        image_path = "temp_graph.png"
+        with open(image_path, "wb") as f:
+            f.write(image_data)
+        pdf.image(image_path, x=10, y=pdf.get_y(), w=180)
+
+    pdf_path = "trend_report.pdf"
+    pdf.output(pdf_path)
+    return pdf_path
+
+# ---------- 🔹 2. Création des Agents CrewAI 🔹 ---------- #
+
+trend_research_agent = Agent(
+    role="Analyste des tendances",
+    goal="Extraire les tendances des recherches Google.",
+    tools=[google_trends_analysis],
+    memory=True, verbose=True, max_iter=3
 )
 
-##############################################
-# Interface Streamlit
-##############################################
-
-st.title("Application interactive avec Gemini")
-
-st.write("Cette application permet de :")
-st.write("- Uploader des fichiers vidéo vers l'API Gemini.")
-st.write("- Attendre leur activation.")
-st.write("- Interagir avec un modèle de langage afin de poser des questions sur le contenu vidéo.")
-st.write("Le snippet original est répliqué avec une interface utilisateur plus conviviale.")
-
-# Zone d’upload de fichiers
-uploaded_files = st.file_uploader(
-    "Chargez un ou plusieurs fichiers (vidéo) :",
-    type=["webm", "mov", "mp4"],
-    accept_multiple_files=True
+data_analyst_agent = Agent(
+    role="Analyste de données",
+    goal="Créer des visualisations des tendances.",
+    tools=[visualize_trends],
+    memory=True, verbose=True, max_iter=2
 )
 
-if "uploaded_to_gemini" not in st.session_state:
-    st.session_state["uploaded_to_gemini"] = False
+report_writer_agent = Agent(
+    role="Rédacteur de rapports",
+    goal="Générer un rapport détaillé.",
+    tools=[generate_pdf_report],
+    memory=True, verbose=True, max_iter=2
+)
 
-if "gemini_files" not in st.session_state:
-    st.session_state["gemini_files"] = []
+marketing_strategist_agent = Agent(
+    role="Stratégiste Marketing",
+    goal="Déduire des recommandations commerciales.",
+    memory=True, verbose=True, max_iter=2
+)
 
-if "chat_session" not in st.session_state:
-    st.session_state["chat_session"] = None
+# ---------- 🔹 3. Définition des tâches CrewAI 🔹 ---------- #
 
-# Bouton pour envoyer les fichiers à Gemini
-if st.button("Envoyer et traiter les fichiers sur Gemini") and uploaded_files:
-    # Sauvegarde temporaire des fichiers
-    local_paths = []
-    for uf in uploaded_files:
-        # Enregistrer le fichier localement
-        with open(uf.name, "wb") as f:
-            f.write(uf.read())
-        local_paths.append(uf.name)
-    
-    # Upload sur Gemini
-    gemini_files = []
-    for path in local_paths:
-        # Déduire le type MIME de base
-        if path.endswith(".webm"):
-            mime = "video/webm"
-        elif path.endswith(".mov"):
-            mime = "video/quicktime"
-        elif path.endswith(".mp4"):
-            mime = "video/mp4"
+extract_trends_task = Task(
+    description="Extraire les tendances Google Trends pour un mot-clé.",
+    expected_output="Données des tendances.",
+    agent=trend_research_agent,
+    async_execution=True
+)
+
+generate_visuals_task = Task(
+    description="Créer un graphique des tendances.",
+    expected_output="Image graphique.",
+    agent=data_analyst_agent,
+    context=[extract_trends_task]
+)
+
+write_report_task = Task(
+    description="Rédiger un rapport détaillé basé sur les tendances et analyses visuelles.",
+    expected_output="Rapport PDF.",
+    agent=report_writer_agent,
+    context=[generate_visuals_task]
+)
+
+generate_strategy_task = Task(
+    description="Proposer des recommandations marketing.",
+    expected_output="Stratégie commerciale.",
+    agent=marketing_strategist_agent,
+    context=[write_report_task]
+)
+
+# ---------- 🔹 4. Création du CrewAI 🔹 ---------- #
+
+trend_analysis_crew = Crew(
+    agents=[trend_research_agent, data_analyst_agent, report_writer_agent, marketing_strategist_agent],
+    tasks=[extract_trends_task, generate_visuals_task, write_report_task, generate_strategy_task],
+    verbose=True
+)
+
+# ---------- 🔹 5. Interface Streamlit 🔹 ---------- #
+
+st.title("🔍 Analyse des Tendances Google Trends")
+keyword = st.text_input("Entrez un mot-clé pour analyser la tendance :")
+
+if st.button("Lancer l'analyse"):
+    if keyword:
+        # Exécuter CrewAI
+        result = trend_analysis_crew.kickoff()
+        
+        # Récupération des résultats
+        trends_data = google_trends_analysis(keyword)
+        graph_base64 = visualize_trends(trends_data)
+        pdf_path = generate_pdf_report(trends_data, graph_base64)
+
+        # Affichage des résultats
+        st.subheader("📊 Graphique des tendances")
+        if "error" not in graph_base64:
+            img_data = base64.b64decode(graph_base64)
+            st.image(img_data, caption="Tendances Google Trends", use_column_width=True)
         else:
-            mime = None
-        f = upload_to_gemini(path, mime_type=mime)
-        gemini_files.append(f)
-        st.write(f"Fichier '{path}' uploadé : {f.uri}")
+            st.warning("Aucune donnée trouvée pour ce mot-clé.")
 
-    # Attente de l'activation des fichiers
-    active_files = wait_for_files_active(gemini_files)
-    st.session_state["gemini_files"] = active_files
-    st.session_state["uploaded_to_gemini"] = True
+        st.subheader("📄 Rapport de tendances")
+        with open(pdf_path, "rb") as pdf_file:
+            pdf_bytes = pdf_file.read()
+        st.download_button(label="📥 Télécharger le rapport PDF", data=pdf_bytes, file_name="trend_report.pdf")
 
-# Une fois les fichiers traités, on peut initialiser la session de chat
-if st.session_state["uploaded_to_gemini"] and st.session_state["chat_session"] is None:
-    # Créez une session de chat semblable à l'exemple
-    # Ajoutons un historique par défaut basé sur l'exemple
-    # Ici on suppose que le premier fichier est utilisé dans le contexte
-    files = st.session_state["gemini_files"]
-    
-    # Historique par défaut comme dans le snippet
-    history = [
-        {
-          "role": "user",
-          "parts": [files[0]] if len(files) > 0 else [],
-        },
-        {
-          "role": "user",
-          "parts": [
-              "Using this video, please answer the below questions:\n\n1. Who is the main subject of the video?\n2. List out how Ashley navigated her trip.\n3. At what timestamp did musicians appear playing instruments?",
-          ],
-        },
-        {
-          "role": "model",
-          "parts": [
-              "Here are the answers based on the video:\n\n1. The main subject of the video is Ashley, a woman going on a trip to Barcelona.\n\n\n2. Ashley navigated her trip using the Google Trips app.  This allowed her to:\n    * Access her itinerary offline, including flight and hotel information.\n    * View a map of her saved places.\n    * Create a personalized itinerary for each day, including travel time to each location.\n    * Find a restaurant recommended by a friend.\n\n\n3. Musicians playing instruments appear at timestamp 0:33 and again at 1:33.",
-          ],
-        },
-    ]
+        st.subheader("🎯 Recommandations stratégiques")
+        st.write(result)
 
-    # Ajout du second fichier et des messages utilisateurs/modèle liés
-    if len(files) > 1:
-        history.extend([
-            {
-              "role": "user",
-              "parts": [files[1]],
-            },
-            {
-              "role": "user",
-              "parts": [
-                "Raconte se qui se passe dans le video",
-              ],
-            },
-            {
-              "role": "model",
-              "parts": [
-                "Bien sûr, voici une description du contenu de la vidéo :\n\nLa vidéo montre un gros plan d’une roue de camion sale et rouillée. La roue est blanche avec des taches de rouille. Le pneu est noir et semble usé. Le sol sous la roue est également sale et de couleur brun foncé.",
-              ],
-            },
-            {
-              "role": "user",
-              "parts": [
-                "Esce que quelque choses semble dangereux?"
-              ],
-            },
-            {
-              "role": "model",
-              "parts": [
-                "Oui, il y a quelques éléments dangereux potentiels dans la vidéo :\n\n* **Rouille :** ...\n* **Usure des pneus :** ...\n"
-              ],
-            },
-        ])
-
-    st.session_state["chat_session"] = model.start_chat(history=history)
-    st.success("Session de chat initialisée avec l'historique!")
-
-##############################################
-# Interaction avec le modèle
-##############################################
-
-if st.session_state["chat_session"] is not None:
-    user_input = st.text_input("Entrez votre message pour le modèle :")
-    if st.button("Envoyer"):
-        if user_input.strip():
-            response = st.session_state["chat_session"].send_message(user_input)
-            st.write("**Réponse du modèle :**")
-            st.write(response.text)
-        else:
-            st.warning("Veuillez entrer une question ou un message.")
+    else:
+        st.warning("Veuillez entrer un mot-clé.")
